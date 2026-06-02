@@ -982,7 +982,7 @@ import shutil
 import os
 
 SRC_PATH = "/content/drive/MyDrive/anature_revised/processed_dataset/ALLCITIES_train_xy_MULTIYEAR_2013_2025_fine0.005_S1_100pct_TOP100.npz"
-DATA_PATH = "/content/ALLCITIES_train_xy_LATEST1Y_fine0.005_S1_100pct_TOP100.npz"
+DATA_PATH = "/content/ALLCITIES_train_xy_monthly_S10_40pct_ntlmask_TOP100.npz"
 
 shutil.copy(SRC_PATH, DATA_PATH)
 
