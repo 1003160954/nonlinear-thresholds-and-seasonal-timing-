@@ -182,8 +182,8 @@ Main logic:
 Typical outputs:
 
 ```text
-/content/ALLCITIES_train_xy_LATEST1Y_fine0.005_S1_100pct_TOP100.npz
-/content/city_sampling_stats_LATEST1Y_TOP100.csv
+ALLCITIES_train_xy_MULTIYEAR_2013_2025_fine0.005_S1_100pct_TOP100.npz
+city_sampling_stats_MULTIYEAR_2013_2025_TOP100.csv
 ```
 
 NPZ fields:
