@@ -182,7 +182,7 @@ Main logic:
 Typical outputs:
 
 ```text
-/content/ALLCITIES_train_xy_LATEST1Y_fine0.005_S1_100pct_TOP100.npz
+/content/ALLCITIES_train_xy_monthly_S10_40pct_ntlmask_TOP100.npz
 city_sampling_stats_MULTIYEAR_2013_2025_TOP100.csv
 ```
 
@@ -201,7 +201,7 @@ NPZ fields:
 Run `2. CAT training dataset`. First set `DATA_PATH` to the NPZ file produced in Step 2:
 
 ```python
-DATA_PATH = "/content/ALLCITIES_train_xy_LATEST1Y_fine0.005_S1_100pct_TOP100.npz"
+DATA_PATH = "/content/ALLCITIES_train_xy_monthly_S10_40pct_ntlmask_TOP100.npz"
 MODEL_OUTDIR = "/content/"
 ```
 
