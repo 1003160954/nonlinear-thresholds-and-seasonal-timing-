@@ -145,7 +145,7 @@ After exporting, place all GeoTIFF files under `ROOT/<city>/`. The downstream Py
 
 ## Step 2: Build the Machine-Learning Dataset
 
-Run `1.1 Constructing the Dataset`. This script scans all city folders under `ROOT`, reads the multi-band GeoTIFF files, and builds a pixel-time training matrix.
+Run `1.1 Constructing the Dataset`. This script scans all city folders under `ROOT`, reads the multi-band GeoTIFF files, and builds a monthly pixel-time training matrix guided by ERA5-scale sampling.
 
 Key configuration:
 
@@ -153,7 +153,7 @@ Key configuration:
 ROOT = "/content/drive/MyDrive/anature_revised/data"
 FINE_DEG = 0.005
 ERA_DEG = 0.10
-SPATIAL_SUBSAMPLE = 1
+SPATIAL_SUBSAMPLE = 2
 SAMPLE_FRAC = 1.0
 CITY_LIMIT = 100
 USE_LATEST_YEAR_ONLY = False
@@ -161,86 +161,78 @@ USE_NTL_CORE = False
 WATER_CODE = 17
 WATER_FRAC_THR = 0.3
 TARGET_PREFS = ("LST.LSTD", "LST.LST_DAY", "LST_DAY")
-```
-
 Main logic:
 
-1. Scan `.tif/.tiff` files for each city.
-2. Parse variable names and temporal labels from band descriptions.
-3. Build a unified `T x H x W x C` array for each city.
-4. Aggregate dynamic variables using a SUM/COUNT strategy.
-5. Use nearest-neighbor resampling for categorical variables and average resampling for continuous variables.
-6. Use land-cover-derived water masks to remove water-dominated ERA5-scale blocks.
-7. Select one valid pixel per ERA5-scale block to reduce spatial redundancy.
-8. Use daytime LST as the target variable `y`.
-9. Remove all `LST*` channels from the feature matrix to avoid target leakage.
-10. Intersect the available feature channels across cities.
-11. Append `META.CITY_ID`.
-12. Save the compressed NPZ dataset and city-level sampling diagnostics.
-
+Scan .tif/.tiff files for each city.
+Parse variable names and temporal labels from band descriptions.
+Build a unified T x H x W x C array for each city.
+Aggregate dynamic variables using a SUM/COUNT strategy.
+Use nearest-neighbor resampling for categorical variables and average resampling for continuous variables.
+Use land-cover-derived water masks to remove water-dominated ERA5-scale blocks.
+Select representative fine-resolution pixels within each ERA5-scale block to reduce spatial redundancy.
+Use daytime LST as the target variable y.
+Keep candidate predictor channels in the feature matrix; leakage-prone LST channels are removed later during model training.
+Intersect the available feature channels across cities.
+Append metadata variables such as META.CITY_ID.
+Save the compressed NPZ dataset and city-level sampling diagnostics.
 Typical outputs:
 
-```text
-/content/ALLCITIES_train_xy_LATEST1Y_fine0.005_S1_100pct_TOP100.npz
-/content/city_sampling_stats_LATEST1Y_TOP100.csv
-```
-
+/content/drive/MyDrive/anature_revised/ALLCITIES_train_xy_monthly_ERA5guidedREVISED_fine0.005_S2_100pct_TOP100_k1_99.npz
+/content/city_sampling_stats_monthly_ERA5guidedREVISED_fine0.005_S2_100pct_TOP100_k1_99.csv
 NPZ fields:
 
-| Field | Meaning |
-|---|---|
-| `X` | Feature matrix with shape `n_samples x n_features` |
-| `y` | Daytime LST target variable |
-| `channels` | Feature names corresponding to columns of `X` |
-| `used_cities` | Cities included in the final training matrix |
-| `note` | Configuration note saved with the dataset |
+Field	Meaning
+X	Feature matrix with shape n_samples x n_features
+y	Daytime LST target variable
+channels	Feature names corresponding to columns of X
+used_cities	Cities included in the final training matrix, if saved
+note	Configuration note saved with the dataset, if available
+Step 3: Train the CatBoost LST Model
+Run 2. CAT training dataset. First set DATA_PATH to the revised NPZ file produced in Step 2:
 
-## Step 3: Train the CatBoost LST Model
-
-Run `2. CAT training dataset`. First set `DATA_PATH` to the NPZ file produced in Step 2:
-
-```python
-DATA_PATH = "/content/ALLCITIES_train_xy_LATEST1Y_fine0.005_S1_100pct_TOP100.npz"
+DATA_PATH = "/content/drive/MyDrive/anature_revised/ALLCITIES_train_xy_monthly_ERA5guidedREVISED_fine0.005_S2_100pct_TOP100_k1_99.npz"
 MODEL_OUTDIR = "/content/"
-```
-
 The script:
 
-1. Loads `X`, `y`, and `channels`.
-2. Drops leakage features whose names start with `LST.`.
-3. Drops selected variables such as `ERA5LMAIN.T2M`, `ERA5LMAIN.TD`, `ERA5LMAIN.STL1`, and `META.CITY_ID`.
-4. Splits the data into training and validation subsets.
-5. Trains CatBoost with GPU if available and falls back to CPU otherwise.
-6. Reports RMSE, MAE, R2, and feature importance.
-7. Saves the model, validation data, feature names, and metrics.
-
+Loads X, y, and channels.
+Converts X and y to float32.
+Drops leakage features whose names start with LST..
+Drops selected variables such as ERA5LMAIN.T2M, ERA5LMAIN.TD, ERA5LMAIN.STL1, and META.CITY_ID.
+Removes samples with invalid target values.
+Splits the data into training and validation subsets.
+Trains CatBoost with GPU settings first.
+Falls back to CPU training if GPU training fails.
+Reports RMSE, MAE, R2, and feature importance.
+Saves the model, validation data, feature names, dropped feature list, and metrics.
 Typical output directory:
 
-```text
 /content/GZ_model_YYYYMMDD_HHMMSS/
   catboost_model.cbm
   channels.npy
   X_valid.npy
   y_valid.npy
   metrics.json
-```
+Saved files:
 
-Important note: the current script contains repeated training blocks and some inconsistent variable names, such as `X_train/X_val` versus `X_tr/X_va`. Before running it as a clean script, keep one training block and standardize the variable names:
+File	Meaning
+catboost_model.cbm	Trained CatBoost regression model
+channels.npy	Final feature names after leakage and manual feature removal
+X_valid.npy	Validation feature matrix
+y_valid.npy	Validation target values
+metrics.json	Train/validation metrics, GPU flag, and dropped feature list
+Important note: the current script should use consistent variable names after the train-validation split:
 
-```python
 X_tr, X_va, y_tr, y_va = train_test_split(
     X, y, test_size=0.2, random_state=RANDOM_SEED
 )
+
 train_pool = Pool(X_tr, y_tr, feature_names=channels)
 val_pool = Pool(X_va, y_va, feature_names=channels)
-```
-
 When saving the validation set, save the same variables:
 
-```python
 np.save(os.path.join(OUT_DIR, "X_valid.npy"), X_va)
 np.save(os.path.join(OUT_DIR, "y_valid.npy"), y_va)
-```
+
 
 ## Step 4: Estimate Nonlinear EVI/LAI Cooling Responses
 
